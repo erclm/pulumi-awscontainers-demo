@@ -3,7 +3,7 @@
 const express = require('express');
 
 // Constants
-const PORT = 80;
+const PORT = 3000;
 const HOST = '0.0.0.0';
 
 const MESSAGE = process.env.APP_MESSAGE || 'Hello World';
