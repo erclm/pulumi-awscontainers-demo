@@ -1,0 +1,21 @@
+*.pyc
+venv/
+*.log
+*.log.*
+
+# Pulumi specific
+.pulumi/
+Pulumi.*.yaml
+!Pulumi.yaml
+
+# Python virtual environment (already covered by venv/)
+__pycache__/
+
+# IDE specific
+.vscode/
+.idea/
+
+# Local development
+*.swp
+.DS_Store
+.env
