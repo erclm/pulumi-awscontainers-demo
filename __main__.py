@@ -21,14 +21,17 @@ repoinfo = repo.repository_url.apply(
 
 image = docker.Image(
     "myappimage", 
-    build=docker.DockerBuild(context="."), 
+    build=docker.DockerBuildArgs(context="."), 
     image_name=repo.repository_url, 
-    registry=docker.ImageRegistry(
+    registry=docker.RegistryArgs(
         server=repoinfo["server"],username=aws.ecr.get_authorization_token().user_name,password=aws.ecr.get_authorization_token().password)
 )
 
 default_vpc = aws.ec2.get_vpc(default=True)
-default_subnet_ids = aws.ec2.get_subnet_ids(vpc_id=default_vpc.id)
+default_subnets = aws.ec2.get_subnets(filters=[{
+    "name": "vpc-id",
+    "values": [default_vpc.id],
+}])
 
 # thank you cursor
 sg = aws.ec2.SecurityGroup(
@@ -62,17 +65,19 @@ task_definition = aws.ecs.TaskDefinition(
     memory="512",
     network_mode="awsvpc",
     requires_compatibilities=["FARGATE"],
-    execution_role_arn=aws.iam.Role("task-execution-role", assume_role_policy=json.dumps({
-        "Version": "2008-10-17",
-        "Statement": [{
-                "Action": "sts:AssumeRole",
-                "Principal": {
-                    "Service": "ecs-tasks.amazonaws.com"
-                },
-                "Effect": "Allow",
-                "Sid": ""
-            }]
-    }
+    execution_role_arn=aws.iam.Role(
+        "task-execution-role",
+        assume_role_policy=json.dumps({
+            "Version": "2008-10-17",
+            "Statement": [{
+                    "Action": "sts:AssumeRole",
+                    "Principal": {
+                        "Service": "ecs-tasks.amazonaws.com"
+                    },
+                    "Effect": "Allow",
+                    "Sid": ""
+                }]
+        }
     )).arn,
     container_definitions=image.image_name.apply(
         lambda image_name: json.dumps([{
@@ -105,7 +110,7 @@ task_definition = aws.ecs.TaskDefinition(
 # Add permissions for the task execution role
 exec_policy_attachment = aws.iam.RolePolicyAttachment(
     "task-exec-policy",
-    role=task_definition.execution_role_name,
+    role="task-execution-role",
     policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 )
 
@@ -114,7 +119,7 @@ lb = aws.lb.LoadBalancer(
     "app-lb",
     load_balancer_type="application",
     security_groups=[sg.id],
-    subnets=default_subnet_ids.ids,
+    subnets=default_subnets.ids,
 )
 
 # Create target group
@@ -158,7 +163,7 @@ service = aws.ecs.Service(
     task_definition=task_definition.arn,
     network_configuration=aws.ecs.ServiceNetworkConfigurationArgs(
         assign_public_ip=True,
-        subnets=default_subnet_ids.ids,
+        subnets=default_subnets.ids,
         security_groups=[sg.id],
     ),
     load_balancers=[
