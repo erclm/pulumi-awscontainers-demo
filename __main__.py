@@ -21,10 +21,16 @@ repoinfo = repo.repository_url.apply(
 
 image = docker.Image(
     "myappimage", 
-    build=docker.DockerBuildArgs(context="."), 
+    build=docker.DockerBuildArgs(
+        context=".",
+        platform="linux/amd64"
+    ), 
     image_name=repo.repository_url, 
     registry=docker.RegistryArgs(
-        server=repoinfo["server"],username=aws.ecr.get_authorization_token().user_name,password=aws.ecr.get_authorization_token().password)
+        server=repoinfo["server"],
+        username=aws.ecr.get_authorization_token().user_name,
+        password=aws.ecr.get_authorization_token().password
+    )
 )
 
 default_vpc = aws.ec2.get_vpc(default=True)
@@ -41,8 +47,8 @@ sg = aws.ec2.SecurityGroup(
     ingress=[
         aws.ec2.SecurityGroupIngressArgs(
             protocol="tcp",
-            from_port=8080,
-            to_port=8080,
+            from_port=80,
+            to_port=80,
             cidr_blocks=["0.0.0.0/0"],
         ),
     ],
@@ -91,8 +97,8 @@ task_definition = aws.ecs.TaskDefinition(
             "image": args[0],
             "essential": True,
             "portMappings": [{
-                "containerPort": 8080,
-                "hostPort": 8080,
+                "containerPort": 80,
+                "hostPort": 80,
                 "protocol": "tcp"
             }],
             "environment": [
@@ -137,7 +143,7 @@ target_group = aws.lb.TargetGroup(
     vpc_id=default_vpc.id,
     health_check=aws.lb.TargetGroupHealthCheckArgs(
         path="/",
-        port="8080",
+        port="80",
         protocol="HTTP",
         matcher="200",
         interval=30,
@@ -176,7 +182,7 @@ service = aws.ecs.Service(
         aws.ecs.ServiceLoadBalancerArgs(
             target_group_arn=target_group.arn,
             container_name="app-container",
-            container_port=8080,
+            container_port=80,
         )
     ],
     opts=pulumi.ResourceOptions(depends_on=[listener]),
