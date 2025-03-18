@@ -41,8 +41,8 @@ sg = aws.ec2.SecurityGroup(
     ingress=[
         aws.ec2.SecurityGroupIngressArgs(
             protocol="tcp",
-            from_port=80,
-            to_port=80,
+            from_port=8080,
+            to_port=8080,
             cidr_blocks=["0.0.0.0/0"],
         ),
     ],
@@ -58,6 +58,25 @@ sg = aws.ec2.SecurityGroup(
 
 cluster = aws.ecs.Cluster("app-cluster")
 
+# Create CloudWatch log group first
+log_group = aws.cloudwatch.LogGroup("app-log-group")
+
+# Create the execution role for the task
+execution_role = aws.iam.Role(
+    "task-execution-role",
+    assume_role_policy=json.dumps({
+        "Version": "2008-10-17",
+        "Statement": [{
+                "Action": "sts:AssumeRole",
+                "Principal": {
+                    "Service": "ecs-tasks.amazonaws.com"
+                },
+                "Effect": "Allow",
+                "Sid": ""
+            }]
+    })
+)
+
 task_definition = aws.ecs.TaskDefinition(
     "app-task",
     family="app-task",
@@ -65,24 +84,11 @@ task_definition = aws.ecs.TaskDefinition(
     memory="512",
     network_mode="awsvpc",
     requires_compatibilities=["FARGATE"],
-    execution_role_arn=aws.iam.Role(
-        "task-execution-role",
-        assume_role_policy=json.dumps({
-            "Version": "2008-10-17",
-            "Statement": [{
-                    "Action": "sts:AssumeRole",
-                    "Principal": {
-                        "Service": "ecs-tasks.amazonaws.com"
-                    },
-                    "Effect": "Allow",
-                    "Sid": ""
-                }]
-        }
-    )).arn,
-    container_definitions=image.image_name.apply(
-        lambda image_name: json.dumps([{
+    execution_role_arn=execution_role.arn,
+    container_definitions=pulumi.Output.all(image.image_name, log_group.name).apply(
+        lambda args: json.dumps([{
             "name": "app-container",
-            "image": image_name,
+            "image": args[0],
             "essential": True,
             "portMappings": [{
                 "containerPort": 8080,
@@ -98,7 +104,7 @@ task_definition = aws.ecs.TaskDefinition(
             "logConfiguration": {
                 "logDriver": "awslogs",
                 "options": {
-                    "awslogs-group": aws.cloudwatch.LogGroup("app-log-group").name,
+                    "awslogs-group": args[1],
                     "awslogs-region": region,
                     "awslogs-stream-prefix": "ecs"
                 }
@@ -110,7 +116,7 @@ task_definition = aws.ecs.TaskDefinition(
 # Add permissions for the task execution role
 exec_policy_attachment = aws.iam.RolePolicyAttachment(
     "task-exec-policy",
-    role="task-execution-role",
+    role=execution_role.name,
     policy_arn="arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy"
 )
 
