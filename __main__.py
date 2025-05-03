@@ -10,8 +10,13 @@ config = pulumi.Config()
 message = config.require("appMessage")
 region = aws.config.region
 
-repo = aws.ecr.Repository("apprepo")
-
+repo = aws.ecr.Repository("apprepo", 
+    tags={
+        "Environment": "dev",
+        "Project": "app",
+        "ManagedBy": "pulumi"
+    }
+)
 repoinfo = repo.repository_url.apply(
     lambda url: {
         "server": url.split("/")[0],
